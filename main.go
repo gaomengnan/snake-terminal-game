@@ -163,10 +163,10 @@ func (g *game) draw() {
 	statusXPos := maxX/2 - len(status)/2
 
 	moveCursor(position{statusXPos, 0})
-	draw(status)
+	draw(cGreen + status)
 
 	moveCursor(g.food)
-	draw("*")
+	draw(cWhite + "*")
 
 	for i, pos := range g.snake.body {
 		moveCursor(pos)
