@@ -254,8 +254,8 @@ func getSize() (int, int) {
 
 func randomPosition() position {
 	width, height := getSize()
-	x := rand.Intn(width) + 1
-	y := rand.Intn(height) + 2
+	x := rand.Intn(width-10) + 1
+	y := rand.Intn(height-10) + 2
 
 	return [2]int{x, y}
 }
