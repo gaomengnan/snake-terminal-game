@@ -14,10 +14,18 @@ import (
 	"golang.org/x/term"
 )
 
+type food struct {
+	color    string
+	shape    string
+	level    int
+	position position
+}
+
 type game struct {
 	score int
 	snake *snake
-	food  position
+	foods []food
+	// food  food
 }
 
 type snake struct {
@@ -36,8 +44,31 @@ const (
 	west
 )
 
+var foods []food
+
 func init() {
 	rand.New(rand.NewSource(time.Now().UnixNano()))
+	foods = append(foods, food{
+		color: cYellow,
+		shape: "*",
+		level: 1,
+	}, food{
+		color: cBlue,
+		shape: "#",
+		level: 2,
+	}, food{
+		color: cGreen,
+		shape: "%",
+		level: 3,
+	})
+}
+
+func (g *game) randomFood() food {
+	randomIndex := rand.Intn(len(foods))
+	pos := randomPosition()
+	food := foods[randomIndex]
+	food.position = pos
+	return food
 }
 
 func newGame() *game {
@@ -46,11 +77,9 @@ func newGame() *game {
 	game := &game{
 		score: 0,
 		snake: snake,
-		food:  randomPosition(),
 	}
-
+	game.foods = append(game.foods, game.randomFood())
 	go game.listenForKeyPress()
-
 	return game
 }
 
@@ -103,9 +132,9 @@ func main() {
 
 		game.snake.body = append([]position{newHeadPos}, game.snake.body...)
 
-		ateFood := positionsAreSame(game.food, newHeadPos)
-		if ateFood {
-			game.score++
+		ateFood := game.matchFood(newHeadPos)
+		if ateFood.level > 0 {
+			game.score = game.score + ateFood.level
 			game.placeNewFood()
 		} else {
 			game.snake.body = game.snake.body[:len(game.snake.body)-1]
@@ -118,22 +147,41 @@ func main() {
 
 func (g *game) placeNewFood() {
 	for {
-		newFoodPosition := randomPosition()
-
-		if positionsAreSame(newFoodPosition, g.food) {
+		if len(g.foods) > 2 {
 			continue
 		}
+		newFood := g.randomFood()
+		// newFoodPosition := randomPosition()
 
-		for _, pos := range g.snake.body {
-			if positionsAreSame(newFoodPosition, pos) {
+		for _, v := range g.foods {
+			if positionsAreSame(newFood.position, v.position) {
 				continue
 			}
 		}
 
-		g.food = newFoodPosition
+		// if positionsAreSame(newFoodPosition, g.food) {
+		// 	continue
+		// }
 
+		for _, pos := range g.snake.body {
+			if positionsAreSame(newFood.position, pos) {
+				continue
+			}
+		}
+		g.foods = append(g.foods, newFood)
 		break
 	}
+}
+
+func (g *game) matchFood(b position) (f food) {
+	for i := len(g.foods) - 1; i >= 0; i-- {
+		if g.foods[i].position[0] == b[0] && g.foods[i].position[1] == b[1] {
+			f = g.foods[i]
+			g.foods = append(g.foods[:i], g.foods[i+1:]...)
+			return
+		}
+	}
+	return food{}
 }
 
 func positionsAreSame(a, b position) bool {
@@ -164,17 +212,18 @@ func (g *game) draw() {
 
 	moveCursor(position{statusXPos, 0})
 	draw(cGreen + status)
-
-	moveCursor(g.food)
-	draw(cWhite + "*")
+	for _, v := range g.foods {
+		moveCursor(v.position)
+		draw(v.color + "*")
+	}
 
 	for i, pos := range g.snake.body {
 		moveCursor(pos)
 
 		if i == 0 {
-			draw("O")
+			draw(cWhite + "O")
 		} else {
-			draw("o")
+			draw(cWhite + "o")
 		}
 	}
 
