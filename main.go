@@ -143,8 +143,6 @@ func main() {
 			newHeadPos.position[0]--
 
 		}
-		log.Printf("snake prev direction:%d", game.snake.prevDirection)
-		log.Printf("snake current direction:%d", game.snake.direction)
 
 		hitWall := newHeadPos.position[0] < 1 || newHeadPos.position[1] < 1 || newHeadPos.position[0] > x ||
 			newHeadPos.position[1] > y
@@ -154,20 +152,14 @@ func main() {
 		}
 		for _, pos := range game.snake.body {
 			if positionsAreSame(newHeadPos.position, pos.position) {
-				log.Printf("current pos:%d,%d", newHeadPos.position[0], newHeadPos.position[1])
-				log.Printf("tick pos pos:%d,%d", pos.position[0], pos.position[1])
-				log.Println("eat yourself")
 				game.over()
 			}
 		}
 
 		game.snake.body = append([]food{newHeadPos}, game.snake.body...)
-		log.Println(game.snake.body)
 
 		ateFood := game.matchFood(newHeadPos.position)
 		if ateFood.level > 0 {
-			log.Println("ateFood")
-			log.Println(ateFood)
 			ateFood.position = newHeadPos.position
 			// game.snake.body = append([]food{ateFood}, game.snake.body...)
 			game.score = game.score + ateFood.level
@@ -175,8 +167,6 @@ func main() {
 			game.snake.body[0].color = ateFood.color
 			game.snake.body[0].shape = ateFood.shape
 		} else {
-			log.Println("less snake")
-			log.Println(game.snake.body)
 			game.snake.body = game.snake.body[:len(game.snake.body)-1]
 		}
 		game.draw()
@@ -256,10 +246,13 @@ func (g *game) draw() {
 		draw(v.color + v.shape)
 	}
 
-	log.Printf("draw: %v", g.snake.body)
-	for _, pos := range g.snake.body {
+	for i, pos := range g.snake.body {
 		moveCursor(pos.position)
-		draw(pos.color + pos.shape)
+		if i == 0 {
+			draw(cWhite + "O")
+		} else {
+			draw(pos.color + pos.shape)
+		}
 	}
 
 	render()
