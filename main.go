@@ -29,8 +29,9 @@ type game struct {
 }
 
 type snake struct {
-	body      []position
-	direction direction
+	body          []food
+	prevDirection direction
+	direction     direction
 }
 
 type position [2]int
@@ -47,6 +48,15 @@ const (
 var foods []food
 
 func init() {
+	// 创建或打开日志文件
+	logFile, err := os.OpenFile("run.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+	if err != nil {
+		log.Fatal("无法打开日志文件:", err)
+	}
+	// defer logFile.Close()
+	// 设置日志输出到文件
+	log.SetOutput(logFile)
+
 	rand.New(rand.NewSource(time.Now().UnixNano()))
 	foods = append(foods, food{
 		color: cYellow,
@@ -72,6 +82,7 @@ func (g *game) randomFood() food {
 }
 
 func newGame() *game {
+	log.Println("game init")
 	snake := newSnake()
 
 	game := &game{
@@ -84,13 +95,22 @@ func newGame() *game {
 }
 
 func newSnake() *snake {
+	log.Println("snake init")
 	maxX, maxY := getSize()
 	pos := position{maxX / 2, maxY / 2}
-
-	return &snake{
-		body:      []position{pos},
+	log.Printf("snake pos:%d,%d", pos[0], pos[1])
+	snake := &snake{
 		direction: north,
 	}
+	snake.body = append(snake.body, food{
+		color:    cWhite,
+		shape:    "O",
+		level:    0,
+		position: pos,
+	},
+	)
+	return snake
+
 }
 
 func main() {
@@ -106,40 +126,59 @@ func main() {
 
 		switch game.snake.direction {
 		case north:
-			newHeadPos[1]--
-
+			if game.snake.prevDirection == south {
+				newHeadPos.position[0]++
+				game.snake.prevDirection = game.snake.direction
+			}
+			newHeadPos.position[1]--
 		case east:
-			newHeadPos[0]++
+			newHeadPos.position[0]++
 		case south:
-			newHeadPos[1]++
+			if game.snake.prevDirection == north {
+				newHeadPos.position[0]++
+				game.snake.prevDirection = game.snake.direction
+			}
+			newHeadPos.position[1]++
 		case west:
-			newHeadPos[0]--
+			newHeadPos.position[0]--
 
 		}
+		log.Printf("snake prev direction:%d", game.snake.prevDirection)
+		log.Printf("snake current direction:%d", game.snake.direction)
 
-		hitWall := newHeadPos[0] < 1 || newHeadPos[1] < 1 || newHeadPos[0] > x ||
-			newHeadPos[1] > y
+		hitWall := newHeadPos.position[0] < 1 || newHeadPos.position[1] < 1 || newHeadPos.position[0] > x ||
+			newHeadPos.position[1] > y
 		if hitWall {
-			fmt.Println("hit wall")
+			log.Println("hit wall")
 			game.over()
 		}
 		for _, pos := range game.snake.body {
-			if positionsAreSame(newHeadPos, pos) {
-				fmt.Println("in self")
+			if positionsAreSame(newHeadPos.position, pos.position) {
+				log.Printf("current pos:%d,%d", newHeadPos.position[0], newHeadPos.position[1])
+				log.Printf("tick pos pos:%d,%d", pos.position[0], pos.position[1])
+				log.Println("eat yourself")
 				game.over()
 			}
 		}
 
-		game.snake.body = append([]position{newHeadPos}, game.snake.body...)
+		game.snake.body = append([]food{newHeadPos}, game.snake.body...)
+		log.Println(game.snake.body)
 
-		ateFood := game.matchFood(newHeadPos)
+		ateFood := game.matchFood(newHeadPos.position)
 		if ateFood.level > 0 {
+			log.Println("ateFood")
+			log.Println(ateFood)
+			ateFood.position = newHeadPos.position
+			// game.snake.body = append([]food{ateFood}, game.snake.body...)
 			game.score = game.score + ateFood.level
 			game.placeNewFood()
+			game.snake.body[0].color = ateFood.color
+			game.snake.body[0].shape = ateFood.shape
 		} else {
+			log.Println("less snake")
+			log.Println(game.snake.body)
 			game.snake.body = game.snake.body[:len(game.snake.body)-1]
 		}
-
 		game.draw()
 
 	}
@@ -164,7 +203,7 @@ func (g *game) placeNewFood() {
 		// }
 
 		for _, pos := range g.snake.body {
-			if positionsAreSame(newFood.position, pos) {
+			if positionsAreSame(newFood.position, pos.position) {
 				continue
 			}
 		}
@@ -214,17 +253,13 @@ func (g *game) draw() {
 	draw(cGreen + status)
 	for _, v := range g.foods {
 		moveCursor(v.position)
-		draw(v.color + "*")
+		draw(v.color + v.shape)
 	}
 
-	for i, pos := range g.snake.body {
-		moveCursor(pos)
-
-		if i == 0 {
-			draw(cWhite + "O")
-		} else {
-			draw(cWhite + "o")
-		}
+	log.Printf("draw: %v", g.snake.body)
+	for _, pos := range g.snake.body {
+		moveCursor(pos.position)
+		draw(pos.color + pos.shape)
 	}
 
 	render()
@@ -276,12 +311,16 @@ func (g *game) listenForKeyPress() {
 		// we ignore the escape character [
 		switch char {
 		case 'A':
+			g.snake.prevDirection = g.snake.direction
 			g.snake.direction = north
 		case 'B':
+			g.snake.prevDirection = g.snake.direction
 			g.snake.direction = south
 		case 'C':
+			g.snake.prevDirection = g.snake.direction
 			g.snake.direction = east
 		case 'D':
+			g.snake.prevDirection = g.snake.direction
 			g.snake.direction = west
 		}
 	}
