@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
+	"sync/atomic"
 	"time"
 
 	"github.com/mattn/go-tty"
@@ -19,12 +20,16 @@ type food struct {
 	shape    string
 	level    int
 	position position
+	id       int32
+
+	isin int32
 }
 
 type game struct {
-	score int
-	snake *snake
-	foods []food
+	score         int
+	snake         *snake
+	foods         []food
+	maxFoodNumber int
 	// food  food
 }
 
@@ -60,24 +65,35 @@ func init() {
 	rand.New(rand.NewSource(time.Now().UnixNano()))
 	foods = append(foods, food{
 		color: cYellow,
-		shape: "*",
+		shape: "☆",
 		level: 1,
 	}, food{
 		color: cBlue,
-		shape: "#",
+		shape: "❤",
 		level: 2,
 	}, food{
 		color: cGreen,
-		shape: "%",
+		shape: "♣",
 		level: 3,
+	}, food{
+		color: cRed,
+		shape: "✿",
+		level: 4,
+	}, food{
+		color: cCyan,
+		shape: "♫",
+		level: 5,
 	})
 }
+
+var foodMaxID int32
 
 func (g *game) randomFood() food {
 	randomIndex := rand.Intn(len(foods))
 	pos := randomPosition()
 	food := foods[randomIndex]
 	food.position = pos
+	food.id = atomic.AddInt32(&foodMaxID, 1)
 	return food
 }
 
@@ -86,8 +102,9 @@ func newGame() *game {
 	snake := newSnake()
 
 	game := &game{
-		score: 0,
-		snake: snake,
+		score:         0,
+		snake:         snake,
+		maxFoodNumber: 3,
 	}
 	game.foods = append(game.foods, game.randomFood())
 	go game.listenForKeyPress()
@@ -132,6 +149,10 @@ func main() {
 			}
 			newHeadPos.position[1]--
 		case east:
+			if game.snake.prevDirection == west {
+				newHeadPos.position[1]++
+				game.snake.prevDirection = game.snake.direction
+			}
 			newHeadPos.position[0]++
 		case south:
 			if game.snake.prevDirection == north {
@@ -140,8 +161,11 @@ func main() {
 			}
 			newHeadPos.position[1]++
 		case west:
+			if game.snake.prevDirection == east {
+				newHeadPos.position[1]--
+				game.snake.prevDirection = game.snake.direction
+			}
 			newHeadPos.position[0]--
-
 		}
 
 		hitWall := newHeadPos.position[0] < 1 || newHeadPos.position[1] < 1 || newHeadPos.position[0] > x ||
@@ -163,6 +187,10 @@ func main() {
 			ateFood.position = newHeadPos.position
 			// game.snake.body = append([]food{ateFood}, game.snake.body...)
 			game.score = game.score + ateFood.level
+			if game.score >= 10 {
+				game.maxFoodNumber = 4
+
+			}
 			game.placeNewFood()
 			game.snake.body[0].color = ateFood.color
 			game.snake.body[0].shape = ateFood.shape
@@ -176,28 +204,29 @@ func main() {
 
 func (g *game) placeNewFood() {
 	for {
-		if len(g.foods) > 2 {
-			continue
-		}
-		newFood := g.randomFood()
-		// newFoodPosition := randomPosition()
+		for i := 0; i < g.maxFoodNumber-len(g.foods); i++ {
+			log.Println(i)
+			newFood := g.randomFood()
+			// newFoodPosition := randomPosition()
 
-		for _, v := range g.foods {
-			if positionsAreSame(newFood.position, v.position) {
-				continue
+			for _, v := range g.foods {
+				if positionsAreSame(newFood.position, v.position) {
+					continue
+				}
 			}
-		}
 
-		// if positionsAreSame(newFoodPosition, g.food) {
-		// 	continue
-		// }
+			// if positionsAreSame(newFoodPosition, g.food) {
+			// 	continue
+			// }
 
-		for _, pos := range g.snake.body {
-			if positionsAreSame(newFood.position, pos.position) {
-				continue
+			for _, pos := range g.snake.body {
+				if positionsAreSame(newFood.position, pos.position) {
+					continue
+				}
 			}
+			g.foods = append(g.foods, newFood)
 		}
-		g.foods = append(g.foods, newFood)
+
 		break
 	}
 }
@@ -241,9 +270,15 @@ func (g *game) draw() {
 
 	moveCursor(position{statusXPos, 0})
 	draw(cGreen + status)
-	for _, v := range g.foods {
-		moveCursor(v.position)
-		draw(v.color + v.shape)
+	log.Printf("foods:%v", g.foods)
+	for _i := range g.foods {
+		moveCursor(g.foods[_i].position)
+		draw(g.foods[_i].color + g.foods[_i].shape)
+		if atomic.SwapInt32(&g.foods[_i].isin, 1) == 0 {
+			log.Printf("reset:%d", g.foods[_i].id)
+			go g.resetPosition(g.foods[_i].id)
+		}
+
 	}
 
 	for i, pos := range g.snake.body {
@@ -257,6 +292,21 @@ func (g *game) draw() {
 
 	render()
 	time.Sleep(time.Millisecond * 50)
+}
+
+func (g *game) resetPosition(id int32) {
+	timer := time.NewTicker(time.Second * 5)
+	<-timer.C
+	for _i := range g.foods {
+		if g.foods[_i].id == id {
+			// found not ate
+			newPos := randomPosition()
+			g.foods[_i].position = newPos
+			atomic.StoreInt32(&g.foods[_i].isin, 0)
+			break
+		}
+
+	}
 }
 
 func (g *game) over() {
@@ -282,8 +332,8 @@ func getSize() (int, int) {
 
 func randomPosition() position {
 	width, height := getSize()
-	x := rand.Intn(width-10) + 1
-	y := rand.Intn(height-10) + 2
+	x := rand.Intn(width-10-10+1) + 10
+	y := rand.Intn(height-10-10+1) + 10
 
 	return [2]int{x, y}
 }
