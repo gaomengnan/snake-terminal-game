@@ -22,7 +22,13 @@ type food struct {
 	position position
 	id       int32
 
-	isin int32
+	canReset bool
+	isin     int32
+
+	canMove bool
+	isMoved int32
+
+	isdied chan bool
 }
 
 type game struct {
@@ -92,6 +98,7 @@ func (g *game) randomFood() food {
 	food := foods[randomIndex]
 	food.position = pos
 	food.id = atomic.AddInt32(&foodMaxID, 1)
+	food.canReset = true
 	return food
 }
 
@@ -259,6 +266,21 @@ func (g *game) prepare() {
 	}()
 }
 
+func (g *game) handlerFoodMove(f *food) {
+
+	var ticker = time.NewTicker(time.Microsecond * 50)
+	for {
+		select {
+		case <-ticker.C:
+			f.position[0]++
+
+		case <-f.isdied:
+			break
+		}
+	}
+
+}
+
 func (g *game) draw() {
 	clear()
 	maxX, _ := getSize()
@@ -272,11 +294,14 @@ func (g *game) draw() {
 	for _i := range g.foods {
 		moveCursor(g.foods[_i].position)
 		draw(g.foods[_i].color + g.foods[_i].shape)
-		if atomic.SwapInt32(&g.foods[_i].isin, 1) == 0 {
+		if atomic.SwapInt32(&g.foods[_i].isin, 1) == 0 && g.foods[_i].canReset {
 			log.Printf("reset:%d", g.foods[_i].id)
 			go g.resetPosition(g.foods[_i].id)
 		}
 
+		if g.foods[_i].canMove && atomic.SwapInt32(&g.foods[_i].isMoved, 1) == 0 {
+
+		}
 	}
 
 	for i, pos := range g.snake.body {
