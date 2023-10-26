@@ -56,10 +56,8 @@ func init() {
 	// 创建或打开日志文件
 	logFile, err := os.OpenFile("run.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
 	if err != nil {
-		log.Fatal("无法打开日志文件:", err)
+		log.Fatal("can not open", err)
 	}
-	// defer logFile.Close()
-	// 设置日志输出到文件
 	log.SetOutput(logFile)
 
 	rand.New(rand.NewSource(time.Now().UnixNano()))
